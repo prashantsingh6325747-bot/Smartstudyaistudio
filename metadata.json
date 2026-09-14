@@ -1,0 +1,6 @@
+{
+  "name": "Smart Study AI",
+  "description": "Academic platform for MITS Gwalior featuring academic spaces, digital library, grounded AI assistance, quizzes, and project management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
