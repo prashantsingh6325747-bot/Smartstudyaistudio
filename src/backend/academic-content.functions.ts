@@ -3,7 +3,6 @@ import { z } from "zod";
 
 import { collection, COLLECTIONS, ObjectId } from "@/backend/mongo.server";
 import { getMe, requireAuth } from "@/authentication/auth.server";
-import { seedAcademicContentIfEmpty } from "@/backend/initial-content-seed";
 import type {
   AcademicDocumentDTO,
   DocumentType,
@@ -12,8 +11,17 @@ import type {
   SubjectDTO,
 } from "@/shared/types";
 
-// Auto seed academic content if empty
-void seedAcademicContentIfEmpty().catch(console.error);
+let academicSeeded = false;
+async function ensureAcademicContent(): Promise<void> {
+  if (academicSeeded) return;
+  academicSeeded = true;
+  try {
+    const { seedAcademicContentIfEmpty } = await import("@/backend/initial-content-seed");
+    await seedAcademicContentIfEmpty();
+  } catch (err) {
+    console.warn("[Academic Content] Auto-seed error:", err);
+  }
+}
 
 export const listSubjects = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) =>
@@ -25,6 +33,7 @@ export const listSubjects = createServerFn({ method: "POST" })
       .parse(input ?? {}),
   )
   .handler(async ({ data }): Promise<SubjectDTO[]> => {
+    await ensureAcademicContent();
     const user = await getMe();
     const subjectsCol = await collection(COLLECTIONS.subjects);
     const programsCol = await collection(COLLECTIONS.programs);
