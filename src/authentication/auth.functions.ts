@@ -54,7 +54,7 @@ export const checkAccount = createServerFn({ method: "POST" })
     z
       .object({
         email: emailSchema,
-        enrollmentNo: z.string().trim().min(1, "Enrollment number is required"),
+        enrollmentNo: z.string().trim().optional().default(""),
         phone: phoneSchema,
       })
       .parse(input),
@@ -69,13 +69,25 @@ export const checkAccount = createServerFn({ method: "POST" })
           "No institute record found for this email. Contact the administrator to get your account registered.",
       };
     }
-    const enrollmentMatches =
-      String(doc["enrollmentNo"] ?? "").toLowerCase() === data.enrollmentNo.toLowerCase();
     const phoneMatches = String(doc["phone"] ?? "") === data.phone;
-    if (!enrollmentMatches || !phoneMatches) {
+    const isStudent = doc["role"] === "student";
+    const expectedEnrollment = String(doc["enrollmentNo"] ?? "")
+      .trim()
+      .toLowerCase();
+    const providedEnrollment = (data.enrollmentNo || "").trim().toLowerCase();
+
+    // Students must match their enrollment number; faculty/admin only match if one was assigned
+    let enrollmentMatches = true;
+    if (isStudent || expectedEnrollment.length > 0) {
+      enrollmentMatches = expectedEnrollment === providedEnrollment;
+    }
+
+    if (!phoneMatches || !enrollmentMatches) {
       return {
         status: "mismatch" as const,
-        message: "The enrollment number or phone number does not match our records.",
+        message: isStudent
+          ? "The enrollment number or phone number does not match our records."
+          : "The phone number (or Employee ID) does not match our records.",
       };
     }
     if (doc["passwordHash"]) {
@@ -97,7 +109,7 @@ export const createPassword = createServerFn({ method: "POST" })
     z
       .object({
         email: emailSchema,
-        enrollmentNo: z.string().trim().min(1),
+        enrollmentNo: z.string().trim().optional().default(""),
         phone: phoneSchema,
         password: passwordSchema,
         otpToken: z.string().min(1, "OTP verification is required"),
@@ -109,8 +121,18 @@ export const createPassword = createServerFn({ method: "POST" })
     const users = await collection(COLLECTIONS.users);
     const doc = await users.findOne({ email: data.email });
     if (!doc) throw new Error("No institute record found for this email.");
-    if (String(doc["enrollmentNo"] ?? "").toLowerCase() !== data.enrollmentNo.toLowerCase()) {
-      throw new Error("Enrollment number does not match our records.");
+
+    const isStudent = doc["role"] === "student";
+    const expectedEnrollment = String(doc["enrollmentNo"] ?? "")
+      .trim()
+      .toLowerCase();
+    const providedEnrollment = (data.enrollmentNo || "").trim().toLowerCase();
+    if ((isStudent || expectedEnrollment.length > 0) && expectedEnrollment !== providedEnrollment) {
+      throw new Error(
+        isStudent
+          ? "Enrollment number does not match our records."
+          : "Employee/Staff ID does not match our records.",
+      );
     }
     if (String(doc["phone"] ?? "") !== data.phone) {
       throw new Error("Phone number does not match our records.");

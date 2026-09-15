@@ -67,6 +67,10 @@ export const listSubjects = createServerFn({ method: "POST" })
       credits: d["credits"] ? Number(d["credits"]) : undefined,
       departmentId: d["departmentId"] ? String(d["departmentId"]) : undefined,
       chapters: Array.isArray(d["chapters"]) ? (d["chapters"] as string[]) : [],
+      batch: d["batch"] ? String(d["batch"]) : undefined,
+      assignedTeacherId: d["assignedTeacherId"] ? String(d["assignedTeacherId"]) : null,
+      assignedTeacherName: d["assignedTeacherName"] ? String(d["assignedTeacherName"]) : null,
+      assignedTeacherEmail: d["assignedTeacherEmail"] ? String(d["assignedTeacherEmail"]) : null,
     }));
   });
 
@@ -80,6 +84,8 @@ export const createSubject = createServerFn({ method: "POST" })
         semester: z.number().int().min(1).max(12),
         credits: z.number().int().min(1).max(10).default(4),
         chapters: z.array(z.string()).default([]),
+        batch: z.string().trim().optional(),
+        assignedTeacherId: z.string().optional(),
       })
       .parse(input),
   )
@@ -89,6 +95,18 @@ export const createSubject = createServerFn({ method: "POST" })
       throw new Error("Only teachers and administrators can add subjects.");
     }
     const subjectsCol = await collection(COLLECTIONS.subjects);
+
+    let assignedTeacherName: string | null = null;
+    let assignedTeacherEmail: string | null = null;
+    if (data.assignedTeacherId && ObjectId.isValid(data.assignedTeacherId)) {
+      const usersCol = await collection(COLLECTIONS.users);
+      const teacherDoc = await usersCol.findOne({ _id: new ObjectId(data.assignedTeacherId) });
+      if (teacherDoc) {
+        assignedTeacherName = String(teacherDoc["name"] ?? "");
+        assignedTeacherEmail = String(teacherDoc["email"] ?? "");
+      }
+    }
+
     const result = await subjectsCol.insertOne({
       code: data.code,
       name: data.name,
@@ -96,9 +114,59 @@ export const createSubject = createServerFn({ method: "POST" })
       semester: data.semester,
       credits: data.credits,
       chapters: data.chapters,
+      batch: data.batch || "",
+      assignedTeacherId: data.assignedTeacherId || null,
+      assignedTeacherName,
+      assignedTeacherEmail,
       createdAt: new Date(),
     });
     return { ok: true, id: result.insertedId.toString() };
+  });
+
+export const assignSubjectTeacher = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) =>
+    z
+      .object({
+        subjectId: z.string().min(1),
+        assignedTeacherId: z.string().nullable(),
+        batch: z.string().trim().optional(),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data }) => {
+    const user = await requireAuth();
+    if (user.role !== "admin") {
+      throw new Error("Only administrators can assign subjects and batches.");
+    }
+    const subjectsCol = await collection(COLLECTIONS.subjects);
+    if (!ObjectId.isValid(data.subjectId)) throw new Error("Invalid subject ID.");
+
+    let teacherName: string | null = null;
+    let teacherEmail: string | null = null;
+
+    if (data.assignedTeacherId) {
+      const usersCol = await collection(COLLECTIONS.users);
+      if (!ObjectId.isValid(data.assignedTeacherId)) throw new Error("Invalid teacher ID.");
+      const teacherDoc = await usersCol.findOne({ _id: new ObjectId(data.assignedTeacherId) });
+      if (!teacherDoc || teacherDoc["role"] !== "teacher") {
+        throw new Error("Selected user is not a registered faculty member.");
+      }
+      teacherName = String(teacherDoc["name"] ?? "");
+      teacherEmail = String(teacherDoc["email"] ?? "");
+    }
+
+    const update: Record<string, unknown> = {
+      assignedTeacherId: data.assignedTeacherId,
+      assignedTeacherName: teacherName,
+      assignedTeacherEmail: teacherEmail,
+      updatedAt: new Date(),
+    };
+    if (typeof data.batch === "string") {
+      update["batch"] = data.batch;
+    }
+
+    await subjectsCol.updateOne({ _id: new ObjectId(data.subjectId) }, { $set: update });
+    return { ok: true, teacherName, batch: data.batch };
   });
 
 export const listAcademicDocuments = createServerFn({ method: "POST" })

@@ -322,12 +322,15 @@ function SignUpForm() {
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="signup-enrollment">Enrollment number</Label>
+        <div className="flex items-center justify-between">
+          <Label htmlFor="signup-enrollment">Enrollment No. / Faculty ID</Label>
+          <span className="text-xs text-muted-foreground">Optional for faculty</span>
+        </div>
         <Input
           id="signup-enrollment"
+          placeholder="e.g. 0901CS221045 or faculty ID (if any)"
           value={enrollmentNo}
           onChange={(e) => setEnrollmentNo(e.target.value)}
-          required
         />
       </div>
       <div className="space-y-2">

@@ -40,9 +40,15 @@ export async function deliverOtpNotification(params: {
   phone: string;
   code: string;
   purpose: OtpPurpose;
-}): Promise<{ sentViaEmail: boolean; sentViaSms: boolean }> {
+}): Promise<{
+  sentViaEmail: boolean;
+  sentViaSms: boolean;
+  deliveryError?: string | undefined;
+  devCode?: string | undefined;
+}> {
   let sentViaEmail = false;
   let sentViaSms = false;
+  let deliveryError: string | undefined;
 
   const purposeText = params.purpose === "activate" ? "account activation" : "password reset";
 
@@ -108,12 +114,16 @@ export async function deliverOtpNotification(params: {
           html: `<p>Your verification code for ${purposeText} is: <strong style="font-size:24px; letter-spacing: 4px;">${params.code}</strong>. Valid for 5 minutes.</p>`,
         }),
       });
-      if (res.ok) sentViaEmail = true;
-      else {
-        console.error("[OTP Resend Delivery Error]", await res.text());
+      if (res.ok) {
+        sentViaEmail = true;
+      } else {
+        const errorText = await res.text();
+        console.error("[OTP Resend Delivery Error]", errorText);
+        deliveryError = errorText;
       }
     } catch (err) {
       console.error("[OTP Resend Delivery Error]", err);
+      deliveryError = err instanceof Error ? err.message : String(err);
     }
   }
 
@@ -180,7 +190,12 @@ export async function deliverOtpNotification(params: {
     `[Smart Study AI OTP] Code dispatched for ${params.email} / ${params.phone} [Email sent: ${sentViaEmail}, SMS sent: ${sentViaSms}] (Code: ${params.code})`,
   );
 
-  return { sentViaEmail, sentViaSms };
+  // If real email delivery didn't succeed (e.g. Resend free tier restrictions, wrong key, or testing),
+  // provide devCode so student/faculty are never locked out of testing.
+  const isProd = process.env["NODE_ENV"] === "production" && (sentViaEmail || sentViaSms);
+  const devCode = isProd ? undefined : params.code;
+
+  return { sentViaEmail, sentViaSms, deliveryError, devCode };
 }
 
 export async function issueOtpToken(email: string, purpose: OtpPurpose): Promise<string> {

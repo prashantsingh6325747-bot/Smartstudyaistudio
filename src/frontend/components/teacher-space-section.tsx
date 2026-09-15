@@ -153,8 +153,9 @@ export function TeacherSpaceSection({ user }: { user: UserDTO }) {
   const spaceDocs = spaceDocsQuery.data ?? [];
 
   // Auto-select first program if empty
-  if (programs.length > 0 && !selectedProgramId) {
-    setSelectedProgramId(programs[0].id);
+  const firstProgramId = programs[0]?.id;
+  if (firstProgramId && !selectedProgramId) {
+    setSelectedProgramId(firstProgramId);
   }
 
   return (
@@ -248,6 +249,8 @@ export function TeacherSpaceSection({ user }: { user: UserDTO }) {
                 <option key={s.id} value={s.id}>
                   {s.code ? `${s.code}: ` : ""}
                   {s.name}
+                  {s.batch ? ` [Batch: ${s.batch}]` : ""}
+                  {s.assignedTeacherName ? ` (${s.assignedTeacherName})` : ""}
                 </option>
               ))}
             </select>
@@ -261,7 +264,7 @@ export function TeacherSpaceSection({ user }: { user: UserDTO }) {
           {/* Active Space Context Banner */}
           <div className="p-4 rounded-xl border border-primary/30 bg-primary/5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Badge className="bg-primary text-primary-foreground font-semibold text-xs">
                   Active Academic Space
                 </Badge>
@@ -269,6 +272,16 @@ export function TeacherSpaceSection({ user }: { user: UserDTO }) {
                   {selectedSubject.code ? `${selectedSubject.code} - ` : ""}
                   {selectedSubject.name}
                 </span>
+                {selectedSubject.batch && (
+                  <Badge variant="outline" className="text-xs bg-background">
+                    Batch: {selectedSubject.batch}
+                  </Badge>
+                )}
+                {selectedSubject.assignedTeacherName && (
+                  <Badge variant="secondary" className="text-xs">
+                    Assigned: {selectedSubject.assignedTeacherName}
+                  </Badge>
+                )}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
                 Semester {selectedSemester} ·{" "}

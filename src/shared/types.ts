@@ -51,6 +51,7 @@ export interface SessionUser {
   name: string;
   email: string;
   role: Role;
+  enrollmentNo?: string | null;
   programId: string | null;
   semester: number | null;
 }
@@ -66,11 +67,15 @@ export interface SubjectDTO {
   code: string;
   name: string;
   programId: string;
-  programName?: string;
+  programName?: string | undefined;
   semester: number;
-  credits?: number;
-  departmentId?: string;
-  chapters?: string[];
+  credits?: number | undefined;
+  departmentId?: string | undefined;
+  chapters?: string[] | undefined;
+  batch?: string | undefined; // e.g. "2022-2026", "Batch A", "Section 1"
+  assignedTeacherId?: string | null | undefined;
+  assignedTeacherName?: string | null | undefined;
+  assignedTeacherEmail?: string | null | undefined;
 }
 
 export type DocumentType =
@@ -93,24 +98,24 @@ export interface AcademicDocumentDTO {
   documentType: DocumentType;
   subjectId: string;
   subjectName: string;
-  subjectCode?: string;
-  chapterName?: string;
-  unitNo?: number;
-  year?: number; // for PYQs
-  fileUrl?: string;
+  subjectCode?: string | undefined;
+  chapterName?: string | undefined;
+  unitNo?: number | undefined;
+  year?: number | undefined; // for PYQs
+  fileUrl?: string | undefined;
   fileName: string;
   fileType: "pdf" | "docx" | "pptx" | "txt" | "link" | "other";
-  fileSize?: string;
-  contentText?: string; // extracted or provided text for AI grounding
+  fileSize?: string | undefined;
+  contentText?: string | undefined; // extracted or provided text for AI grounding
   programId: string;
-  programName?: string;
+  programName?: string | undefined;
   semester: number;
   uploadedBy: string;
   uploaderName: string;
   createdAt: string;
-  viewsCount?: number;
-  downloadsCount?: number;
-  isBookmarked?: boolean;
+  viewsCount?: number | undefined;
+  downloadsCount?: number | undefined;
+  isBookmarked?: boolean | undefined;
 }
 
 export type LibraryCategory =
@@ -120,21 +125,21 @@ export interface LibraryBookDTO {
   id: string;
   title: string;
   author: string;
-  isbn?: string;
+  isbn?: string | undefined;
   category: LibraryCategory;
-  departmentId?: string;
-  departmentName?: string;
-  programId?: string;
-  programName?: string;
-  semester?: number;
-  subjectName?: string;
-  edition?: string;
-  pages?: number;
-  fileUrl?: string;
-  fileName?: string;
+  departmentId?: string | undefined;
+  departmentName?: string | undefined;
+  programId?: string | undefined;
+  programName?: string | undefined;
+  semester?: number | undefined;
+  subjectName?: string | undefined;
+  edition?: string | undefined;
+  pages?: number | undefined;
+  fileUrl?: string | undefined;
+  fileName?: string | undefined;
   description: string;
-  isBookmarked?: boolean;
-  recentlyViewedAt?: string;
+  isBookmarked?: boolean | undefined;
+  recentlyViewedAt?: string | undefined;
 }
 
 export type QuestionType = "mcq" | "true_false" | "short_answer" | "subjective";
@@ -143,11 +148,11 @@ export interface QuizQuestionDTO {
   id: string;
   type: QuestionType;
   text: string;
-  options?: string[]; // for MCQ and true/false
-  correctAnswer?: string | number; // option index or answer string
+  options?: string[] | undefined; // for MCQ and true/false
+  correctAnswer?: string | number | undefined; // option index or answer string
   marks: number;
-  explanation?: string;
-  groundedSource?: string;
+  explanation?: string | undefined;
+  groundedSource?: string | undefined;
 }
 
 export interface QuizDTO {
@@ -155,21 +160,21 @@ export interface QuizDTO {
   title: string;
   subjectId: string;
   subjectName: string;
-  chapterName?: string;
+  chapterName?: string | undefined;
   programId: string;
-  programName?: string;
+  programName?: string | undefined;
   semester: number;
-  startTime?: string;
-  endTime?: string;
+  startTime?: string | undefined;
+  endTime?: string | undefined;
   durationMinutes: number;
   maxMarks: number;
   questionsCount: number;
   createdBy: string;
   authorName: string;
-  isAiGenerated?: boolean;
+  isAiGenerated?: boolean | undefined;
   createdAt: string;
-  hasAttempted?: boolean;
-  lastAttemptScore?: number;
+  hasAttempted?: boolean | undefined;
+  lastAttemptScore?: number | undefined;
 }
 
 export interface QuizDetailDTO extends QuizDTO {
@@ -189,7 +194,7 @@ export interface QuizAttemptDTO {
   timeTakenSeconds: number;
   submittedAt: string;
   answers: Record<string, string | number>;
-  feedback?: string;
+  feedback?: string | undefined;
 }
 
 export type ProjectDocumentType = "synopsis" | "report" | "ppt" | "documentation" | "final_project";
@@ -202,7 +207,7 @@ export interface ProjectDocumentDTO {
   fileName: string;
   submittedAt: string;
   status: "submitted" | "approved" | "changes_requested";
-  remarks?: string;
+  remarks?: string | undefined;
 }
 
 export interface ProjectDTO {
@@ -211,9 +216,9 @@ export interface ProjectDTO {
   description: string;
   academicYear: string;
   departmentId: string;
-  departmentName?: string;
+  departmentName?: string | undefined;
   programId: string;
-  programName?: string;
+  programName?: string | undefined;
   facultyGuideId: string;
   facultyGuideName: string;
   studentIds: string[];
@@ -221,7 +226,7 @@ export interface ProjectDTO {
   studentEnrollments: string[];
   status: "in_progress" | "review_pending" | "approved" | "completed";
   progressPercentage: number;
-  facultyFeedback?: string;
+  facultyFeedback?: string | undefined;
   documents: ProjectDocumentDTO[];
   createdAt: string;
   updatedAt: string;
@@ -232,9 +237,9 @@ export interface AnnouncementDTO {
   title: string;
   content: string;
   type: "quiz" | "notes" | "assignment" | "deadline" | "academic";
-  targetProgramId?: string;
-  targetProgramName?: string;
-  targetSemester?: number;
+  targetProgramId?: string | undefined;
+  targetProgramName?: string | undefined;
+  targetSemester?: number | undefined;
   authorName: string;
   authorRole: Role;
   createdAt: string;
@@ -244,24 +249,24 @@ export interface AICitation {
   title: string;
   category:
     "Notes" | "Study Material" | "PYQ" | "Practice Question" | "Digital Library" | "AI Knowledge";
-  documentId?: string;
-  chapterOrUnit?: string;
+  documentId?: string | undefined;
+  chapterOrUnit?: string | undefined;
 }
 
 export interface AIChatMessageDTO {
   id: string;
   role: "user" | "assistant";
   content: string;
-  sources?: AICitation[];
+  sources?: AICitation[] | undefined;
   createdAt: string;
 }
 
 export interface AIChatConversationDTO {
   id: string;
   title: string;
-  subjectId?: string;
-  subjectName?: string;
-  academicContext?: string;
+  subjectId?: string | undefined;
+  subjectName?: string | undefined;
+  academicContext?: string | undefined;
   messagesCount: number;
   updatedAt: string;
 }

@@ -3,7 +3,7 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
 import { toast } from "sonner";
-import { CheckCircle2, Database, Server } from "lucide-react";
+import { CheckCircle2, Database, Server, BookOpen, UserCheck, Plus } from "lucide-react";
 
 import { AppShell, EmptyState } from "@/frontend/components/app-shell";
 import { Badge } from "@/components/ui/badge";
@@ -37,9 +37,14 @@ import {
   promoteStudents,
   updateUserAcademics,
 } from "@/backend/academics.functions";
+import {
+  listSubjects,
+  createSubject,
+  assignSubjectTeacher,
+} from "@/backend/academic-content.functions";
 import { getMe, getDatabaseStatus } from "@/authentication/auth.functions";
 import { LEVEL_LABEL } from "@/shared/types";
-import type { AcademicLevel, ProgramDTO, Role } from "@/shared/types";
+import type { AcademicLevel, ProgramDTO, Role, SubjectDTO, UserDTO } from "@/shared/types";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
@@ -134,12 +139,16 @@ function AdminPage() {
         <Tabs defaultValue="users">
           <TabsList>
             <TabsTrigger value="users">Users</TabsTrigger>
+            <TabsTrigger value="subjects">Subject & Faculty Allocation</TabsTrigger>
             <TabsTrigger value="structure">Academic structure</TabsTrigger>
             <TabsTrigger value="promotion">Promotion</TabsTrigger>
           </TabsList>
 
           <TabsContent value="users" className="pt-6">
             <UsersPanel programs={programsQuery.data ?? []} />
+          </TabsContent>
+          <TabsContent value="subjects" className="pt-6">
+            <SubjectAllocationPanel programs={programsQuery.data ?? []} />
           </TabsContent>
           <TabsContent value="structure" className="pt-6">
             <StructurePanel />
@@ -551,6 +560,393 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <div className="space-y-2">
       <Label>{label}</Label>
       {children}
+    </div>
+  );
+}
+
+function SubjectAllocationPanel({ programs }: { programs: ProgramDTO[] }) {
+  const queryClient = useQueryClient();
+  const [selectedProgramId, setSelectedProgramId] = useState<string>(programs[0]?.id || "");
+  const [selectedSemester, setSelectedSemester] = useState<string>("1");
+
+  // New Subject form state
+  const [showCreateSubject, setShowCreateSubject] = useState(false);
+  const [newCode, setNewCode] = useState("");
+  const [newName, setNewName] = useState("");
+  const [newCredits, setNewCredits] = useState("4");
+  const [newBatch, setNewBatch] = useState("2024-2028");
+  const [newTeacherId, setNewTeacherId] = useState<string>("unassigned");
+
+  // Quick edit assignment modal/state
+  const [editingSubject, setEditingSubject] = useState<SubjectDTO | null>(null);
+  const [editTeacherId, setEditTeacherId] = useState<string>("unassigned");
+  const [editBatch, setEditBatch] = useState("");
+
+  const usersQuery = useQuery({
+    queryKey: ["users"],
+    queryFn: () => listUsers(),
+  });
+
+  const subjectsQuery = useQuery({
+    queryKey: ["admin-subjects", selectedProgramId, selectedSemester],
+    queryFn: () =>
+      listSubjects({
+        data: {
+          programId: selectedProgramId || undefined,
+          semester: selectedSemester ? Number(selectedSemester) : undefined,
+        },
+      }),
+  });
+
+  const teachers = (usersQuery.data ?? []).filter((u) => u.role === "teacher");
+  const subjects = subjectsQuery.data ?? [];
+
+  const createSubjectFn = useServerFn(createSubject);
+  const createMutation = useMutation({
+    mutationFn: () =>
+      createSubjectFn({
+        data: {
+          code: newCode.trim(),
+          name: newName.trim(),
+          programId: selectedProgramId,
+          semester: Number(selectedSemester),
+          credits: Number(newCredits) || 4,
+          chapters: [],
+          batch: newBatch.trim(),
+          assignedTeacherId: newTeacherId === "unassigned" ? undefined : newTeacherId,
+        },
+      }),
+    onSuccess: () => {
+      toast.success("Subject created and assigned successfully!");
+      setShowCreateSubject(false);
+      setNewCode("");
+      setNewName("");
+      setNewBatch("2024-2028");
+      setNewTeacherId("unassigned");
+      void queryClient.invalidateQueries({ queryKey: ["admin-subjects"] });
+      void queryClient.invalidateQueries({ queryKey: ["teacher-subjects"] });
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : "Failed to create subject.");
+    },
+  });
+
+  const assignSubjectFn = useServerFn(assignSubjectTeacher);
+  const assignMutation = useMutation({
+    mutationFn: (vars: { subjectId: string; teacherId: string | null; batch?: string }) =>
+      assignSubjectFn({
+        data: {
+          subjectId: vars.subjectId,
+          assignedTeacherId: vars.teacherId,
+          batch: vars.batch,
+        },
+      }),
+    onSuccess: () => {
+      toast.success("Subject teacher & batch allocation updated.");
+      setEditingSubject(null);
+      void queryClient.invalidateQueries({ queryKey: ["admin-subjects"] });
+      void queryClient.invalidateQueries({ queryKey: ["teacher-subjects"] });
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : "Allocation update failed.");
+    },
+  });
+
+  return (
+    <div className="space-y-6">
+      {/* Allocation Header & Filter */}
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <BookOpen className="size-4 text-primary" />
+                Subject & Faculty Allocation Management
+              </CardTitle>
+              <CardDescription>
+                Assign course subjects, subject codes, and academic batches (e.g. 2022-2026, Section
+                A) to designated faculty members.
+              </CardDescription>
+            </div>
+
+            <Button
+              onClick={() => setShowCreateSubject((prev) => !prev)}
+              size="sm"
+              className="gap-1.5"
+            >
+              <Plus className="size-4" />
+              {showCreateSubject ? "Close Form" : "Add New Subject"}
+            </Button>
+          </div>
+        </CardHeader>
+
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Filter by Programme">
+              <Select
+                value={selectedProgramId}
+                onValueChange={(val) => {
+                  setSelectedProgramId(val);
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select programme" />
+                </SelectTrigger>
+                <SelectContent>
+                  {programs.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {LEVEL_LABEL[p.level]} · {p.name} ({p.code})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+
+            <Field label="Filter by Semester">
+              <Select value={selectedSemester} onValueChange={(val) => setSelectedSemester(val)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select semester" />
+                </SelectTrigger>
+                <SelectContent>
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
+                    <SelectItem key={s} value={String(s)}>
+                      Semester {s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* New Subject Form Drawer / Card */}
+      {showCreateSubject && (
+        <Card className="border-primary/40 bg-primary/5">
+          <CardHeader>
+            <CardTitle className="text-sm font-semibold">
+              Create New Subject & Initial Allocation
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Assign subject code, title, credits, batch, and assigned teacher.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <Field label="Subject Code (e.g. 100301, CS-501)">
+                <Input
+                  placeholder="e.g. 100301"
+                  value={newCode}
+                  onChange={(e) => setNewCode(e.target.value)}
+                />
+              </Field>
+
+              <Field label="Subject Name">
+                <Input
+                  placeholder="e.g. Data Structures & Algorithms"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                />
+              </Field>
+
+              <Field label="Credits">
+                <Input
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={newCredits}
+                  onChange={(e) => setNewCredits(e.target.value)}
+                />
+              </Field>
+
+              <Field label="Batch / Section (e.g. 2024-2028, Batch A)">
+                <Input
+                  placeholder="e.g. 2024-2028"
+                  value={newBatch}
+                  onChange={(e) => setNewBatch(e.target.value)}
+                />
+              </Field>
+
+              <Field label="Assign Faculty / Teacher">
+                <Select value={newTeacherId} onValueChange={setNewTeacherId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a teacher" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unassigned">-- Unassigned --</SelectItem>
+                    {teachers.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.name} ({t.email})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+            </div>
+
+            <div className="flex items-center gap-2 pt-2">
+              <Button
+                onClick={() => createMutation.mutate()}
+                disabled={!newCode.trim() || !newName.trim() || createMutation.isPending}
+                size="sm"
+              >
+                {createMutation.isPending ? "Creating…" : "Save Subject & Allocation"}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setShowCreateSubject(false)}>
+                Cancel
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Subjects & Allocation Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Allocated Subjects ({subjects.length})</CardTitle>
+          <CardDescription>
+            List of subjects for Semester {selectedSemester} with current faculty teacher assignment
+            and batch tags.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {subjects.length === 0 ? (
+            <EmptyState
+              title="No subjects created for this semester"
+              description="Click 'Add New Subject' above to add subjects and assign them to teachers and student batches."
+            />
+          ) : (
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Subject Code</TableHead>
+                    <TableHead>Subject Name</TableHead>
+                    <TableHead>Programme & Sem</TableHead>
+                    <TableHead>Batch / Section</TableHead>
+                    <TableHead>Assigned Faculty</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {subjects.map((sub) => {
+                    const isEditing = editingSubject?.id === sub.id;
+
+                    return (
+                      <TableRow key={sub.id}>
+                        <TableCell className="font-mono font-semibold text-xs">
+                          {sub.code}
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {sub.name}
+                          {sub.credits ? (
+                            <span className="ml-2 text-xs text-muted-foreground">
+                              ({sub.credits} cr)
+                            </span>
+                          ) : null}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {sub.programName ?? "Programme"} · Sem {sub.semester}
+                        </TableCell>
+                        <TableCell>
+                          {isEditing ? (
+                            <Input
+                              value={editBatch}
+                              onChange={(e) => setEditBatch(e.target.value)}
+                              placeholder="Batch (e.g. 2024-2028)"
+                              className="h-8 w-36 text-xs"
+                            />
+                          ) : (
+                            <Badge variant="outline" className="font-normal text-xs">
+                              {sub.batch ? sub.batch : "All Batches"}
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {isEditing ? (
+                            <Select value={editTeacherId} onValueChange={setEditTeacherId}>
+                              <SelectTrigger className="h-8 w-48 text-xs">
+                                <SelectValue placeholder="Assign teacher" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="unassigned">-- Unassigned --</SelectItem>
+                                {teachers.map((t) => (
+                                  <SelectItem key={t.id} value={t.id}>
+                                    {t.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : sub.assignedTeacherName ? (
+                            <div className="flex items-center gap-1.5">
+                              <UserCheck className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+                              <span className="font-medium text-xs">{sub.assignedTeacherName}</span>
+                              {sub.assignedTeacherEmail ? (
+                                <span className="text-[11px] text-muted-foreground">
+                                  ({sub.assignedTeacherEmail})
+                                </span>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <Badge
+                              variant="secondary"
+                              className="text-[11px] text-amber-700 dark:text-amber-300"
+                            >
+                              Unassigned
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {isEditing ? (
+                            <div className="flex items-center justify-end gap-1.5">
+                              <Button
+                                size="sm"
+                                className="h-7 px-2.5 text-xs"
+                                disabled={assignMutation.isPending}
+                                onClick={() =>
+                                  assignMutation.mutate({
+                                    subjectId: sub.id,
+                                    teacherId:
+                                      editTeacherId === "unassigned" ? null : editTeacherId,
+                                    batch: editBatch.trim(),
+                                  })
+                                }
+                              >
+                                {assignMutation.isPending ? "Saving…" : "Save"}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 px-2 text-xs"
+                                onClick={() => setEditingSubject(null)}
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs"
+                              onClick={() => {
+                                setEditingSubject(sub);
+                                setEditTeacherId(sub.assignedTeacherId || "unassigned");
+                                setEditBatch(sub.batch || "");
+                              }}
+                            >
+                              Assign / Reallocate
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
